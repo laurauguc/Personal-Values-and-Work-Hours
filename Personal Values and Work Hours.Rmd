@@ -1,0 +1,412 @@
+---
+title: "Personal Values and Work Hours"
+author: "Laura Uguccioni"
+date: "December 16, 2015"
+output: html_document
+---
+
+d <- read.csv("~/Documents/QMSS Term 1/QMSS 4015 - Data Analysis/Labs/GSS2006.csv")
+
+```{r}
+d <- read.csv("~/Documents/QMSS Term 1/QMSS 4015 - Data Analysis/Labs/GSS2006.csv")
+
+d$satjob_recode <- 5 - d$satjob
+d$workhard_recode <-  6 - d$workhard # from less to more important
+d$richwork_recode <- 2 - d$richwork # continue to work
+d$workfor_recode <- factor(d$workfor, labels = c("private company", "non-profit organization", "government agency"))
+d$fepresch_recode <- 5 - d$fepresch
+d$fefam_recode <- 5 - d$fefam
+d$gender_recode <- d$gender1 - 1
+d$fund_recode <- factor(d$fund, labels = c("Fundamentalist", "Moderate", "Liberal"), ordered = TRUE)
+d$hrs0 <- ifelse(d$wrkstat >= 4, 1, 0)
+d$hrs_new <- ifelse(is.na(d$hrs1) & d$hrs0 == 1, 0, d$hrs1) # hrs1: add 0 to people who don't work.
+d$sphrs_new <- ifelse(is.na(d$sphrs1) & d$spwrksta >= 4, 0, d$sphrs1) # hrs1: add 0 to people who don't work.
+d$sex_recode <- d$sex - 1
+
+vars <- c("hrs1", "hrs_new", "satjob_recode", "workhard_recode", "richwork_recode", "prestg80", "workfor_recode", "age", "childs", "educ", "numorg", "fechld", "fefam_recode", "fepresch_recode", "sex_recode", "wrkstat", "fund_recode", "sphrs1", "sphrs_new", "income", "income06")
+sub <- d[, vars]
+```
+
+# Multivariate Regression
+
+```{r}
+lm2 <- lm(hrs_new ~ richwork_recode + workhard_recode, data = sub)
+lm2b <- lm(hrs_new ~ workhard_recode, data = sub)
+
+lm3 <- lm(hrs_new ~ fefam_recode + fepresch_recode + fechld, data = sub)
+
+lm4 <- lm(hrs_new ~ fefam_recode + fepresch_recode + fechld + workhard_recode, data = sub)
+
+library(stargazer)
+stargazer(lm2, lm2b, lm3, lm4, type = 'text')
+```
+
+For report
+```{r}
+setwd("~/Desktop/Final Project - Data Analysis/Tables")
+stargazer(lm2, lm3, lm4, type = 'text', dep.var.labels = "Hours of work (including 0)" , covariate.labels =  c("Continue working", "Value hard work in a child", "Man achiever is preferred", "Child suffering if mother works", "Working mother not as warm"), title = "Table 1: Initial Models", out = "table1.htm")
+```
+
+(No overlaps between richwork and fefam => all obseraions are dropped)
+
+Why do these two different sets of values seem to mediate each other?
+
+# Constructing a scale
+
+```{r}
+library(psych)
+scale <- data.frame(sub$fefam_recode, sub$fepresch_recode, sub$fechld )
+summary(alpha(scale))
+```
+
+alpha > .70 => good scale
+
+```{r}
+scale2 <- data.frame(sub$richwork_recode, sub$workhard_recode )
+scale2$sub.workhard_recode <- - scale2$sub.workhard_recode
+summary(alpha(scale2))
+```
+Not a good scale. In fact, slight negative association. Maybe 'richwork' does not express a value but reveals practical considerations. __Check this ?__ Look at: jobsec
+
+New variable:
+```{r}
+sub$fe_work <- with(sub, ifelse(is.na(fepresch_recode), (fefam_recode + fechld)/2, (fefam_recode + fepresch_recode + fechld)/3))
+```
+
+New regression:
+```{r}
+lm5 <- lm(hrs_new ~ fe_work, data = sub)
+lm6 <- lm(hrs_new ~ fe_work + workhard_recode, data = sub)
+stargazer(lm5, lm2b, lm6, type = 'text')
+```
+
+For report:
+```{r}
+stargazer(lm5, lm2b, lm6, type = 'text', covariate.labels =  c("Family roles for women", "Value hard work in a child"), dep.var.labels = "Hours of work (including 0)", title = "Table 2: Use of a scale to improve initial models ", out = "table2.htm")
+
+```
+
+The effects continue to mediate each other. (Is it because of observations dropped? is the decision to work vs not work different from the decision of number of hours?)
+
+# Control Variables
+
+Sex
+childs
+educ
+income06
+age
+
+```{r}
+lm6b <- lm(hrs_new ~ fe_work + workhard_recode + sex_recode + childs + educ + income06, data = sub)
+lm6c <- lm(hrs_new ~ fe_work + workhard_recode + sex_recode + childs + educ + income06 + age, data = sub)
+stargazer(lm6, lm6b, lm6c, type = 'text')
+```
+
+For report:
+```{r}
+stargazer(lm6, lm6b, lm6c, type = 'text', covariate.labels =  c("Family roles for women", "Value hard work in a child", "Female", "Number of children", "Education", "Household income", "Age"), dep.var.labels = "Hours of work (including 0)", title = "Table 3: Use of controls to improve the model", out = "table3.htm")
+```
+
+age mediates the effect of number of children
+
+# Interactions
+
+```{r}
+lm7 <- lm(hrs_new ~ fe_work * sex_recode + workhard_recode, data = sub)
+lm8 <- lm(hrs_new ~ fe_work * sex_recode + workhard_recode * sex_recode, data = sub)
+lm6d <- lm(hrs_new ~ fe_work + workhard_recode + sex_recode + income06 + age, data = sub)
+lm10 <- lm(hrs_new ~ fe_work * sex_recode + workhard_recode * sex_recode + age + income06, data = sub)
+stargazer(lm6, lm7, lm8, lm10, type = 'text')
+stargazer(lm6d, lm10, type = 'text')
+```
+
+__For report__
+```{r}
+stargazer(lm6d, lm10, type = 'text', covariate.labels =  c("Family roles for women", "Value hard work in a child", "Female", "Household income", "Family roles for women * Female", "Value hard work in a child * Female", "Age"), dep.var.labels = "Hours of work (including 0)", title = "Table 4: Use of interactions to improve the model", out = "table4.htm")
+```
+
+Notice sex_recode now shows women working more after controlling for other factors. show chart.
+
+
+# Non-linear relationships
+
+```{r}
+lm21 <- lm(hrs_new ~ fe_work * sex_recode + as.factor(workhard_recode) * sex_recode + age + income06, data = sub)
+stargazer(lm10, lm21, type = 'text')
+
+lm22 <- lm(hrs_new ~ fe_work * workhard_recode * sex_recode + I(fe_work^2) + I(workhard_recode^2) + age + income06, data = sub)
+summary(lm22)
+
+```
+
+age might also have a non linear relationship
+```{r}
+plot(sub$hrs_new ~ age, data = sub)
+sub$age_cut <- cut(sub$age, breaks = 4)
+lm10b <- lm(hrs_new ~ fe_work * sex_recode + workhard_recode * sex_recode + age_cut + income06, data = sub)
+stargazer(lm10, lm10b, type = 'text')
+AIC(lm10, lm10b) # lm10b is a better fit
+```
+__For report__
+```{r}
+stargazer(lm10, lm10b, type = 'text', covariate.labels =  c("Family roles for women", "Female", "Value hard work in a child", "Age", "Age from 36 to 53", "Age from 54 to 71", "Age from 72 to 89",  "Household income", "Family roles for women * Female", "Value hard work in a child * Female"), dep.var.labels = "Hours of work (including 0)", title = "Table 5: Modifications to the variables to improve the model", out = "table5.htm")
+```
+
+
+# Modififcation to dependent variable + spouse's hours
+
+```{r}
+lm8b <- lm(hrs1 ~ fe_work * sex_recode + workhard_recode * sex_recode, data = sub)
+lm8c <- lm(sphrs_new ~ fe_work * sex_recode + workhard_recode * sex_recode, data = sub)
+lm8d <- lm(sphrs1 ~ fe_work * sex_recode + workhard_recode * sex_recode, data = sub)
+
+stargazer(lm8, lm8b, lm8c, lm8d, type = 'text')
+```
+
+if you are a female, for every level that you value hard work more, your spouse works more, but you don't.
+
+
+
+
+same reasoning. use best model (lm10b) __!!!!!!!__
+```{r}
+
+lm10f <- lm(hrs1 ~ fe_work * sex_recode + workhard_recode * sex_recode + age + income06, data = sub)
+lm10d <- lm(sphrs_new ~ fe_work * sex_recode + workhard_recode * sex_recode + age + income06, data = sub)
+lm10e <- lm(sphrs1 ~ fe_work * sex_recode + workhard_recode * sex_recode + age + income06, data = sub)
+stargazer(lm10, lm10f, lm10d, lm10e, type = 'text')
+```
+
+__For report__
+```{r}
+stargazer(lm10, lm10f, lm10d, lm10e, type = 'text', covariate.labels =  c("Family roles for women", "Female", "Value hard work in a child", "Age",  "Household income", "Family roles for women * Female", "Value hard work in a child * Female"), dep.var.labels = c("work hours", "hrs1","spouse's work hours", "sphrs1" ), title = "Table 6: Modifications to the hours variable", out = "table6.htm")
+```
+
+
+
+Check mediating effects: __!!__
+Istead of mediating each other, they now amplify each other's effect.
+```{r}
+lm10b <- lm(hrs_new ~ fe_work * sex_recode + workhard_recode * sex_recode + age_cut + income06, data = sub)
+stargazer(lm10, lm10b, type = 'text')
+
+lm23 <- lm(hrs_new ~ workhard_recode * sex_recode + age_cut + income06, data = sub)
+lm24 <- lm(hrs_new ~ fe_work * sex_recode + age_cut + income06, data = sub)
+stargazer(lm24, lm23, lm10b, type = 'text')
+```
+
+__For report__
+```{r}
+stargazer(lm24, lm23, lm10b, type = 'text', covariate.labels =  c("Family roles for women", "Value hard work in a child", "Female", "Age from 36 to 53", "Age from 54 to 71", "Age from 72 to 89",  "Household income", "Family roles for women * Female", "Value hard work in a child * Female",  "Value hard work in a child * Female"), dep.var.labels = c("Hours of work (including 0)"), title = "Table 7: Checking mediation effects between primary IVS", out = "table7.htm")
+```
+
+
+
+More investigation: add controls
+
+```{r}
+lm8e <- lm(sphrs_new ~ fe_work * sex_recode + workhard_recode * sex_recode + age + income06, data = sub)
+lm8f <- lm(sphrs1 ~ fe_work * sex_recode + workhard_recode * sex_recode + age + income06, data = sub)
+
+stargazer(lm8c, lm8d, lm8e, lm8f, type = 'text')
+```
+
+Is the mediating effect between the two values when only considering working people? (It might also be due to the observations being dropped)
+```{r}
+lm9 <- lm(hrs1 ~ fe_work, data = sub)
+lm9b <- lm(hrs1 ~ workhard_recode, data = sub)
+lm9c <- lm(hrs1 ~ workhard_recode + fe_work, data = sub)
+stargazer(lm9, lm9b , lm9c, lm8b, type = 'text')
+```
+
+# Additional considerations 
+
+__Income could have different effects at different points.__ Non linear relationship? (bimodal? )
+
+income vs household income
+```{r}
+lm18a <- lm(hrs_new ~ fe_work * sex_recode + workhard_recode * sex_recode + age + income, data = sub)
+lm18b <- lm(hrs_new ~ fe_work * sex_recode + workhard_recode * sex_recode + age + income06 + income, data = sub)
+stargazer(lm10, lm18a, lm18b, type = 'text')
+
+lm10c <- lm(hrs_new ~ fe_work * sex_recode + workhard_recode * sex_recode + age_cut + income, data = sub)
+stargazer(lm10b, lm10c, type = 'text')
+AIC(lm10b, lm10c)
+```
+
+
+spouse's hours
+```{r}
+lm19 <- lm(hrs_new ~ fe_work * sex_recode + workhard_recode * sex_recode + age + income06 + sphrs_new * sex_recode, data = sub)
+stargazer(lm10, lm19, type = 'text')
+```
+large drop in number of observations.
+
+
+
+include richwork ?
+investigation of hours and income
+```{r}
+plot(hrs_new ~ income, data = sub)
+sub2 <- data.frame(sub$hrs_new, sub$income)
+sub2 <- sub2[complete.cases(sub2), ]
+lm11 <- lm(sub.hrs_new ~ as.factor(sub.income), data = sub2)
+plot(lm11$fitted.values ~ sub.income, data = sub2)
+
+sub3 <- data.frame(sub$hrs_new, sub$income06)
+sub3 <- sub3[complete.cases(sub3), ]
+lm12 <- lm(sub.hrs_new ~ as.factor(sub.income06), data = sub3)
+plot(lm12$fitted.values ~ sub.income06, data = sub3)
+
+summary(lm(hrs_new ~ income06 * richwork_recode, data = sub))
+
+sub$income06_recode <- cut(sub$income06, breaks = 3)
+sub$income06_recode2 <- ifelse(sub$income06 > 10, 1, 0)
+
+lm13 <- lm(hrs_new ~ fe_work * sex_recode + workhard_recode * sex_recode + age + income06_recode, data = sub)
+lm20 <- lm(hrs_new ~ fe_work * sex_recode + workhard_recode * sex_recode + age + income06_recode2, data = sub)
+stargazer(lm10, lm13, lm20, type = 'text')
+AIC(lm10, lm13, lm20)
+```
+
+richwork now appears relevant (but not anymore below)
+```{r}
+lm17 <- lm(hrs_new ~ workhard_recode * sex_recode + age + income06 * richwork_recode, data = sub)
+stargazer(lm10, lm17, type = 'text')
+```
+
+work a lot because of good income
+work a lot because of low wage
+low income because low hours (cannot find more work)
+do not work a lot because spouse makes enough income
+
+
+
+More children? --> more income needed? or more time needed? (No clear answer: see below)
+```{r}
+lm14 <- lm(hrs_new ~ fe_work * sex_recode + workhard_recode * sex_recode + age + income06 * childs, data = sub)
+lm15 <- lm(hrs_new ~ fe_work * sex_recode + workhard_recode * sex_recode + age + income06_recode * childs, data = sub)
+lm16 <- lm(hrs_new ~ fe_work * sex_recode + workhard_recode * sex_recode + age + as.factor(income06) * childs, data = sub)
+stargazer(lm14, lm15, lm16, type = 'text')
+```
+
+# Standardized coefficients
+
+Regress the z-score of the dependent variable on the z-score of the independent variable. Called "beta coefficients."
+Interpretation: a one-s.d. increase in the independent variable translated into a __ increase in the s.d. of the dependent variable
+
+Best model so far:
+```{r}
+stargazer(lm10b, type = 'text')
+```
+
+What is the relative importance of each factor?
+
+```{r}
+# STEP 1. Name the function and its argument(s) (we'll use stdCoef as the function name and "fit" as the name of the argument since we'll apply our function to a fitted model)
+# STEP 2. Get the standard deviations of all of the variables in the model by applying the sd() function to each column of fit$model (fit$model gives us a dataframe only containing the vars and obs used when running the model)
+# STEP 3. Extract the coefficients from the model except for the intercept
+# STEP 4. Compute the standardized coefficients as std.coeff = coef * sx/sy
+# STEP 5. (Optional) Have R print an informative message about the function's output
+
+sub$age35_53 <- with(sub, age > 35.8 & age <= 53.5)
+sub$age54_71 <- with(sub, age > 53.5 & age <= 71.2)
+sub$age72_89 <- with(sub, age > 71.2 & age <= 89.1)
+
+lm10b <- lm(hrs_new ~ fe_work * sex_recode + workhard_recode * sex_recode + age35_53 + age54_71 + age72_89 + income06, data = sub)
+
+stdCoef <- function(fit){ # step 1
+   sd <- apply(X = fit$model, MARGIN = 2, FUN = sd) # step 2 ; MARGIN = 2 indicates columns (for rows we would use 1)
+   coefficients <- fit$coefficients[-1] # step 3
+   std.coefs <- coefficients * (sd[-1] / sd[1]) # step 4
+   cat("Standardized Coefficients for ", deparse(substitute(fit)), "\n")# step 5
+ return(std.coefs) # this tells R that the output should be std.coefs
+}
+# deparse (substitute(fit)) takes the argument of our function "fit" and converts it to a character string # "\n" inserts a linebreak
+
+stdCoef(lm10b)
+```
+
+In absolute standardized terms, the factors that have the biggest effect on the hours worked:
+1.  sex: 0.71123833
+2. age 72 to 89: -0.39789039
+3. household income: 0.28353412
+4. fework:sex: -0.24854574
+5. age 54 to 71: -0.19133938
+6. workhard: 0.14048113
+7. sex:workhard : -0.12893083
+8. fework:  0.11794829
+9. age 35 to 53: -0.05377744
+
+
+Therefore:
+1. sex
+2. age
+3. income (though the direction of causality is probability the opposite)
+4. gender values interacted with being a female
+5. working hard value
+6. working hard value interacted with being a female
+7. gender values
+
+
+
+# PCA
+
+# Charts
+
+__Family roles for women__
+Assume: Age between 18 to 35
+Assume mean household income category: 16.59  * 1.087
+hours resulting from above: 
+
+Value hard work in a child: assume mean value of: 3.59
+
+Men: -1.027 + 3.59 * 3.164 + 16.59  * 1.087 = 28.36509
+Women: 32.616 -1.027 + 3.59 * (-5.912) + 16.59  * 1.087 = 28.39825
+
+```{r}
+Gender_roles <- c(1:4, 1:4)
+female <- c(rep(FALSE, length = 4), rep(TRUE, length = 4))
+work_hours <- ifelse(female == 0, 28.36509 + 4.171 * (Gender_roles - 1), 28.39825 -8.789 * (Gender_roles - 1))
+
+df <- data.frame(Gender_roles, female, work_hours)
+library(ggplot2)
+ggplot(data = df, aes(x = Gender_roles, y = work_hours, group = female, color = as.factor(female))) + geom_line() + xlab("Family roles for women") + ylab("Work hours")             
+```
+
+__Hard work__
+Mean family roles for women: 2.264
+
+Assume: Age between 18 to 35
+Assume mean household income category: 16.59  * 1.087
+
+Men: -1.027 + 2.264 * 4.171 + 16.59  * 1.087 = 28.50347
+Women: 32.616 -1.027 + 2.264 * (-8.789) + 16.59  * 1.087 = 29.72403
+
+```{r}
+work_hard <- c(1:4, 1:4)
+female <- c(rep(FALSE, length = 4), rep(TRUE, length = 4))
+work_hours <- ifelse(female == 0, 28.50347 + 3.164 * (Gender_roles - 1), 29.72403 -5.912 * (Gender_roles - 1))
+
+df <- data.frame(work_hard, female, work_hours)
+ggplot(data = df, aes(x = Gender_roles, y = work_hours, group = female, color = as.factor(female))) + geom_line() + xlab("Value hard work in a child") + ylab("Work hours") 
+
+```
+
+
+# Descriptive statistics
+
+```{r}
+vars2 <- c("hrs_new", "workhard_recode", "fefam_recode", "fepresch_recode", "fechld", "richwork_recode", "sex_recode", "childs", "income06", "age", "educ")
+
+main <- sub[, vars2]
+stargazer(main, type = 'text', digits = 2, title = "Descriptive Statistics", out = "descriptive_stat.htm", covariate.labels = c("Work hours", "Value hard work in a child", "Man achiever is preferred", "Child suffering if mother works", "Working mother not as warm", "Continue working", "Female", "Number of children", "Household income", "Age", "Education"))
+```
+
+941) Think of the number of hours you work and the money you earn in your main job, including regular overtime. If you had only one of these three choices, which of the following would you prefer? (HRSMONEY)
+
+957) Supposed you could decide on your work situation at present. Which of the following would you prefer? (WANTJOB1)
+
+958) Which of the following statements best describes how your working hours are decided? (By working hours we mean here the times you start and finish work and not the total hours you work per week or month.) (SETHOURS)
+
+17) IF SPOUSE WORKING, FULL- OR PART-TIME: How many hours did (he/she work last week, at all jobs? (SPHRS1)
