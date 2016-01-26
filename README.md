@@ -1,1 +1,3 @@
 # Personal-Values-and-Work-Hours
+
+I completed this project for my introductory data analysis class. I used data from the General Social Survey, 2006, to analyze respondents' answers to personal value-related question to their work hours. Methods: multiple regression, scales, control variables, interactions, non-linear relationships, and standardized coefficients. I find that personal values around hard work and gender values affect the hours of women and men differently. The results and limitations of the study are discussed in the paper.
